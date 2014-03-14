@@ -3,9 +3,10 @@
 """
 Store and find files via tags.
 
-TODO ls tags
 TODO add/remove tags
 TODO add search
+TODO add file
+TODO import
 """
 
 import sys
@@ -137,8 +138,17 @@ def ls(args):
     info = storage_info(find_files(tag_path))
     filtered = filter_files(globs, matcher_from_args(args), info.files.values())
 
-    for f in filtered:
-        print(f.name)
+    for f in sorted(filtered, key=lambda x: x.name):
+        left = f.name
+        if args.show_path:
+            left = path.join(f.dir_path, left)
+
+        if args.show_tags:
+            right = " " + " ".join(sorted(f.tags))
+        else:
+            right = ""
+
+        print(left+right)
 
 
 def main():
@@ -156,6 +166,10 @@ def main():
                                  help="Only show files without this tag")
 
     ls_parser = sub_parsers.add_parser("ls", help="List files", parents=[tag_expr_parser])
+    ls_parser.add_argument("-l", "--show-tags", action="store_true",
+                           help="show the tags of each file")
+    ls_parser.add_argument("-p", "--show-path", action="store_true",
+                           help="show the path of each file")
     ls_parser.add_argument("glob", nargs="*",
                            help="file patterns to show")
     ls_parser.set_defaults(func=ls)
