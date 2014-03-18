@@ -3,10 +3,10 @@
 """
 Store and find files via tags.
 
-TODO add/remove tags
 TODO add search
 TODO add file
 TODO import
+TODO help
 """
 
 import sys
@@ -21,7 +21,7 @@ FILES_DIR = "files"
 
 File = namedtuple("File", "name tags dir_path")
 
-StorageInfo = namedtuple("StorageInfo", "files all_tags ")
+StorageInfo = namedtuple("StorageInfo", "tag_path files all_tags ")
 
 
 class MatchAnd(object):
@@ -64,14 +64,17 @@ def tags_from_dir(d):
 
 
 def find_files(tag_path):
-    dirs = ((p, path.relpath(p, tag_path), fs) for p, ds, fs in os.walk(tag_path))
-    for p, d, fs in dirs:
+    dirs = ((path.relpath(p, tag_path), fs) for p, ds, fs in os.walk(tag_path))
+    for d, fs in dirs:
         tags = tags_from_dir(d)
         for f in fs:
-            yield File(f, tags, p)
+            yield File(f, tags, d)
 
 
-def storage_info(file_list):
+def storage_info(args):
+    tag_path = path.join(find_tag_dir(args), FILES_DIR)
+    file_list = find_files(tag_path)
+
     all_tags = set()
     files = {}
     for f in file_list:
@@ -80,7 +83,7 @@ def storage_info(file_list):
             raise Exception("Duplicate file: %s" % name)
         files[name] = f
         all_tags.update(tags)
-    return StorageInfo(files, all_tags)
+    return StorageInfo(tag_path, files, all_tags)
 
 
 def create_empty_dir(p):
@@ -132,16 +135,26 @@ def filter_files(globs, matcher, files):
     return filter(_impl, files)
 
 
-def ls(args):
+def glob_files(info, args):
     globs = args.glob or ["*"]
-    tag_path = path.join(find_tag_dir(args), FILES_DIR)
-    info = storage_info(find_files(tag_path))
-    filtered = filter_files(globs, matcher_from_args(args), info.files.values())
+    return filter_files(globs, matcher_from_args(args), info.files.values())
+
+
+def abs_path(info, f):
+    if f.dir_path == ".":
+        return path.join(info.tag_path, f.name)
+    else:
+        return path.join(info.tag_path, f.dir_path, f.name)
+
+def ls(args):
+    info = storage_info(args)
+    filtered = glob_files(info, args)
 
     for f in sorted(filtered, key=lambda x: x.name):
-        left = f.name
         if args.show_path:
-            left = path.join(f.dir_path, left)
+            left = abs_path(info, f)
+        else:
+            left = f.name
 
         if args.show_tags:
             right = " " + " ".join(sorted(f.tags))
@@ -149,6 +162,33 @@ def ls(args):
             right = ""
 
         print(left+right)
+
+
+def edit(args):
+    info = storage_info(args)
+    filtered = glob_files(info, args)
+    for f in filtered:
+        new_tags = set(f.tags)
+
+        if args.remove:
+            for t in args.remove:
+                if t in new_tags:
+                    new_tags.remove(t)
+
+        if args.add:
+            for t in args.add:
+                new_tags.add(t)
+
+        if len(new_tags) == 0:
+            new_dir = ""
+        else:
+            new_dir = path.join(*sorted(new_tags))
+
+        old_file = abs_path(info, f)
+        new_file = path.join(info.tag_path, new_dir, f.name)
+        if old_file != new_file:
+            #print(old_file, new_file)
+            os.renames(old_file, new_file)
 
 
 def main():
@@ -160,19 +200,26 @@ def main():
     init_parser.set_defaults(func=init)
 
     tag_expr_parser = argparse.ArgumentParser(add_help=False)
-    tag_expr_parser.add_argument("-t", "--tag", nargs="*",
+    tag_expr_parser.add_argument("-t", "--tag", action="append",
                                  help="Only show files with this tag")
-    tag_expr_parser.add_argument("-n", "--exclude", nargs="*",
+    tag_expr_parser.add_argument("-n", "--exclude", action="append",
                                  help="Only show files without this tag")
+    tag_expr_parser.add_argument("glob", nargs="*",
+                           help="file patterns to show")
 
     ls_parser = sub_parsers.add_parser("ls", help="List files", parents=[tag_expr_parser])
     ls_parser.add_argument("-l", "--show-tags", action="store_true",
                            help="show the tags of each file")
     ls_parser.add_argument("-p", "--show-path", action="store_true",
                            help="show the path of each file")
-    ls_parser.add_argument("glob", nargs="*",
-                           help="file patterns to show")
     ls_parser.set_defaults(func=ls)
+
+    edit_parser = sub_parsers.add_parser("edit", help="Edit the tags of filed", parents=[tag_expr_parser])
+    edit_parser.add_argument("-a", "--add", action="append",
+                             help="Add a tag to the files")
+    edit_parser.add_argument("-r", "--remove", action="append",
+                             help="Remove a tag from the files")
+    edit_parser.set_defaults(func=edit)
 
     args = parser.parse_args()
     args.func(args)
