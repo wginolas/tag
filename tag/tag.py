@@ -3,13 +3,13 @@
 """
 Store and find files via tags.
 
+TODO tests
 TODO add search
 TODO add file
 TODO import
 TODO help
 """
 
-import sys
 import argparse
 import os
 from os import path
@@ -110,7 +110,7 @@ def find_tag_dir(args):
         if path.isfile(path.join(p, CONF_NAME)):
             return p
         p, t = path.split(p)
-        if t=="":
+        if t == "":
             break
     raise Exception("No tag store found in the directory %s" % given_path)
 
@@ -145,6 +145,7 @@ def abs_path(info, f):
         return path.join(info.tag_path, f.name)
     else:
         return path.join(info.tag_path, f.dir_path, f.name)
+
 
 def ls(args):
     info = storage_info(args)
@@ -205,7 +206,7 @@ def main():
     tag_expr_parser.add_argument("-n", "--exclude", action="append",
                                  help="Only show files without this tag")
     tag_expr_parser.add_argument("glob", nargs="*",
-                           help="file patterns to show")
+                                 help="file patterns to show")
 
     ls_parser = sub_parsers.add_parser("ls", help="List files", parents=[tag_expr_parser])
     ls_parser.add_argument("-l", "--show-tags", action="store_true",
@@ -222,7 +223,10 @@ def main():
     edit_parser.set_defaults(func=edit)
 
     args = parser.parse_args()
-    args.func(args)
+    if "func" in args:
+        args.func(args)
+    else:
+        parser.print_help()
 #    try:
 #        args.func(args)
 #    except Exception as e:
